@@ -1,9 +1,7 @@
 package com.tfc.minecraft_effekseer_implementation.common.api;
 
 import com.tfc.effekseer4j.EffekseerParticleEmitter;
-import com.tfc.minecraft_effekseer_implementation.FinalizedReference;
 
-import java.util.HashMap;
 import java.util.Objects;
 
 /**

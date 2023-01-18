@@ -1,8 +1,7 @@
 {
-  "effect": "mc_effekseer_impl:test.efkefc",
+  "effect": "mc_effekseer_impl:laser.efkefc",
   "textures": {
-	"test2.png": "mc_effekseer_impl:test1.png",
-	"test3.png": "mc_effekseer_impl:test.png"
+	"particle1.png": "mc_effekseer_impl:particle1.png"
   },
   "maxSpriteCount": 10000
 }

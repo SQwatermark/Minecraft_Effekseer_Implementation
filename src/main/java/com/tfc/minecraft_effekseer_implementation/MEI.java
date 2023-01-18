@@ -1,21 +1,25 @@
 package com.tfc.minecraft_effekseer_implementation;
 
+import com.mojang.math.Matrix4f;
 import com.tfc.effekseer4j.EffekseerEffect;
 import com.tfc.effekseer4j.enums.TextureType;
 import com.tfc.minecraft_effekseer_implementation.common.Effek;
 import com.tfc.minecraft_effekseer_implementation.common.Effeks;
 import com.tfc.minecraft_effekseer_implementation.common.LoaderIndependentIdentifier;
-import com.tfc.minecraft_effekseer_implementation.loader.EffekseerMCAssetLoader;
+import com.tfc.minecraft_effekseer_implementation.common.api.EffekEmitter;
+import com.tfc.minecraft_effekseer_implementation.network.Command;
+import com.tfc.minecraft_effekseer_implementation.network.Networking;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.RenderState;
-import net.minecraft.resources.IReloadableResourceManager;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.vector.Matrix4f;
-import net.minecraftforge.client.event.RenderWorldLastEvent;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ReloadableResourceManager;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.client.event.EntityViewRenderEvent;
+import net.minecraftforge.client.event.RenderLevelLastEvent;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.fml.ModList;
+import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.server.FMLServerAboutToStartEvent;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -24,9 +28,9 @@ import org.apache.logging.log4j.Logger;
 @Mod("mc_effekseer_impl")
 public class MEI {
 	private static final Logger LOGGER = LogManager.getLogger();
-	
+
 	private static final Effeks mapHandler = Effeks.getMapHandler();
-	
+
 	public MEI() {
 		// resource locations are very nice to have for registry type stuff, and I want the api to be 100% loader independent
 		if (LoaderIndependentIdentifier.rlConstructor1.get() == null) {
@@ -34,48 +38,48 @@ public class MEI {
 			LoaderIndependentIdentifier.rlConstructor2.set(ResourceLocation::new);
 		}
 		if (Effek.widthGetter.get() == null) {
-			Effek.widthGetter.set(() -> Minecraft.getInstance().getMainWindow().getWidth());
-			Effek.heightGetter.set(() -> Minecraft.getInstance().getMainWindow().getHeight());
+			Effek.widthGetter.set(() -> Minecraft.getInstance().getMainRenderTarget().viewWidth);
+			Effek.heightGetter.set(() -> Minecraft.getInstance().getMainRenderTarget().viewHeight);
 		}
-		if (ModDetectionUtil.detector.get() == null) ModDetectionUtil.detector.set((name) -> ModList.get().isLoaded(name));
-		
+
 		Networking.init();
 		MinecraftForge.EVENT_BUS.addListener(this::onServerStartup);
 		if (!FMLEnvironment.dist.isClient()) return;
 		MinecraftForge.EVENT_BUS.addListener(this::renderWorldLast);
-		IReloadableResourceManager manager = (IReloadableResourceManager) Minecraft.getInstance().getResourceManager();
-		manager.addReloadListener(EffekseerMCAssetLoader.INSTANCE);
+		MinecraftForge.EVENT_BUS.addListener(this::fovEvent);
+		ReloadableResourceManager manager = (ReloadableResourceManager) Minecraft.getInstance().getResourceManager();
+		manager.registerReloadListener(EffekseerMCAssetLoader.INSTANCE);
+
+
 	}
-	
-	private void onServerStartup(FMLServerAboutToStartEvent event) {
-		event.getServer().getCommandManager().getDispatcher().register(Command.construct());
+
+	private void onServerStartup(RegisterCommandsEvent event) {
+		event.getDispatcher().register(Command.construct());
 	}
 	
 	private static long lastFrame = -1;
+
+	private double fov = 70;
+
+	private void fovEvent(EntityViewRenderEvent.FieldOfView event) {
+		fov = event.getFOV();
+	}
 	
-	private void renderWorldLast(RenderWorldLastEvent event) {
+	private void renderWorldLast(RenderLevelLastEvent event) {
 		mapHandler.setTimeSinceReload(Effeks.getTimeSinceReload() + 1);
-//		Effek effek = Effeks.get("mc_effekseer_impl:example");
-//		if (effek != null) {
-//			EffekEmitter emitter = effek.getOrCreate("test:test");
-//			emitter.setVisible(false);
-//			for (Entity allEntity : Minecraft.getInstance().world.getAllEntities()) {
-//				if (allEntity instanceof FishingBobberEntity) {
-//					emitter.emitter.setVisibility(true);
-//					emitter.emitter.move(
-//							(float) MathHelper.lerp(Minecraft.getInstance().getRenderPartialTicks(), (float) allEntity.lastTickPosX, allEntity.getPosX()) - 0.5f,
-//							(float) MathHelper.lerp(Minecraft.getInstance().getRenderPartialTicks(), (float) allEntity.lastTickPosY, allEntity.getPosY()) - 0.5f,
-//							(float) MathHelper.lerp(Minecraft.getInstance().getRenderPartialTicks(), (float) allEntity.lastTickPosZ, allEntity.getPosZ()) - 0.5f
-//					);
-//				}
-//				if (allEntity instanceof ArmorStandEntity) {
-//					ResourceLocation location = new ResourceLocation("modid:"+allEntity.getUniqueID().toString());
-//					EffekEmitter emitter1 = effek.getOrCreate(location.toString());
-//					emitter1.setPosition(allEntity.getPosX(), allEntity.getPosY() + allEntity.getEyeHeight(), allEntity.getPosZ());
-//					if (!allEntity.isAlive()) effek.delete(emitter1);
-//				}
-//			}
-//		}
+		Effek effek = Effeks.get("mc_effekseer_impl:example");
+		if (effek != null) {
+			EffekEmitter emitter = effek.getOrCreate("test:test");
+			emitter.setVisible(false);
+			for (Entity allEntity : Minecraft.getInstance().level.entitiesForRendering()) {
+				if (allEntity instanceof ArmorStand) {
+					ResourceLocation location = new ResourceLocation("modid:"+ allEntity.getUUID());
+					EffekEmitter emitter1 = effek.getOrCreate(location.toString());
+					emitter1.setPosition(allEntity.getX(), allEntity.getY() + allEntity.getEyeHeight(), allEntity.getZ());
+					if (!allEntity.isAlive()) effek.delete(emitter1);
+				}
+			}
+		}
 //		effek = Effeks.get("example:aura");
 //		if (effek != null)
 //			for (int x = 0; x < 16; x++) {
@@ -92,27 +96,27 @@ public class MEI {
 		}
 		lastFrame = System.currentTimeMillis();
 		Matrix4f matrix;
-		event.getMatrixStack().push();
-		event.getMatrixStack().translate(
-				-Minecraft.getInstance().getRenderManager().info.getProjectedView().getX(),
-				-Minecraft.getInstance().getRenderManager().info.getProjectedView().getY(),
-				-Minecraft.getInstance().getRenderManager().info.getProjectedView().getZ()
+		event.getPoseStack().pushPose();
+		assert Minecraft.getInstance().player != null;
+		Vec3 pos = Minecraft.getInstance().player.position();
+		event.getPoseStack().translate(
+				-pos.x,
+				-pos.y,
+				-pos.z
 		);
-		event.getMatrixStack().translate(0.5f, 0.5f, 0.5f);
-		matrix = event.getMatrixStack().getLast().getMatrix();
+		event.getPoseStack().translate(0.5f, 0.5f, 0.5f);
+		matrix = event.getPoseStack().last().pose();
 		float[][] cameraMatrix = matrixToArray(matrix);
-		event.getMatrixStack().pop();
-		matrix = Minecraft.getInstance().gameRenderer.getProjectionMatrix(
-				Minecraft.getInstance().getRenderManager().info,
-				event.getPartialTicks(), true
-		);
+		event.getPoseStack().popPose();
+		matrix = Minecraft.getInstance().gameRenderer.getProjectionMatrix(fov);
 		float[][] projectionMatrix = matrixToArray(matrix);
 		final float finalDiff = diff;
-		if (Minecraft.getInstance().worldRenderer.getParticleFrameBuffer() != null)
-			Minecraft.getInstance().worldRenderer.getParticleFrameBuffer().func_237506_a_(Minecraft.getInstance().getFramebuffer());
-		RenderState.PARTICLES_TARGET.setupRenderState();
+		if (Minecraft.getInstance().levelRenderer.getParticlesTarget() != null)
+			Minecraft.getInstance().levelRenderer.getParticlesTarget().copyDepthFrom(Minecraft.getInstance().getMainRenderTarget());
+//		ParticleRenderType.TERRAIN_SHEET.begin();
+		// TODO 似乎应该有个插值
 		Effeks.forEach((name, effect) -> effect.draw(cameraMatrix, projectionMatrix, finalDiff));
-		RenderState.PARTICLES_TARGET.clearRenderState();
+//		ParticleRenderType.TERRAIN_SHEET.end();
 	}
 	
 	public static void printEffectInfo(EffekseerEffect effect) {
@@ -134,11 +138,6 @@ public class MEI {
 	}
 	
 	public static float[][] matrixToArray(Matrix4f matrix) {
-		return new float[][]{
-				{matrix.m00, matrix.m01, matrix.m02, matrix.m03},
-				{matrix.m10, matrix.m11, matrix.m12, matrix.m13},
-				{matrix.m20, matrix.m21, matrix.m22, matrix.m23},
-				{matrix.m30, matrix.m31, matrix.m32, matrix.m33}
-		};
+		return ((Matrix4fExtended)(Object)matrix).toArray();
 	}
 }
